@@ -11,8 +11,8 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.db.session import engine, Base
-    Base.metadata.create_all(bind=engine)
+    from app.db.session import engine, Base, init_db
+    init_db()
     print(f"Backend started — provider={settings.llm_provider}, db={settings.database_url}")
     yield
 
