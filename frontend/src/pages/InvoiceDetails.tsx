@@ -325,7 +325,7 @@ export default function InvoiceDetails() {
       <div className="span-5" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
 
         {/* F. Final decision */}
-        <section className="card" aria-labelledby="decision-heading" style={{ position: 'sticky', top: 72 }}>
+        <section className="card" aria-labelledby="decision-heading">
           <div className="card-header" style={{ marginBottom: 8 }}>
             <div>
               <h2 id="decision-heading">Final decision</h2>
