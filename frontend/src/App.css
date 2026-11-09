@@ -1,0 +1,63 @@
+.app {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 1.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.subtitle {
+  color: #666;
+  font-size: 0.95rem;
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.status-card, .info-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.25rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.status-card.ok {
+  border-left: 4px solid #22c55e;
+}
+
+.status-card.error {
+  border-left: 4px solid #ef4444;
+}
+
+.status-card.pending {
+  border-left: 4px solid #f59e0b;
+  color: #666;
+}
+
+.status-card h2, .info-card h2 {
+  font-size: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.status-card p {
+  font-size: 0.9rem;
+  color: #444;
+}
+
+.info-card ul {
+  padding-left: 1.25rem;
+  font-size: 0.9rem;
+  color: #444;
+  line-height: 1.8;
+}
