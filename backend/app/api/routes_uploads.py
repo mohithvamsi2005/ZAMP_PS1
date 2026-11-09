@@ -220,11 +220,27 @@ async def get_invoice_document(invoice_id: int):
         raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} not found")
     if not inv.storage_path:
         raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} has no stored document")
+
+    # Defense in depth: only serve files that live under the configured upload
+    # directory. Even a manually-crafted database row cannot coax this endpoint
+    # into streaming arbitrary filesystem content.
     path = Path(inv.storage_path)
-    if not path.exists():
+    try:
+        resolved = path.resolve(strict=True)
+    except (OSError, RuntimeError):
         raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} document is missing on disk")
+
+    settings = get_settings()
+    try:
+        base = Path(settings.upload_dir).resolve()
+    except (OSError, RuntimeError):
+        base = None
+    if base is None or (resolved != base and base not in resolved.parents):
+        logger.warning("Invoice %s document resolved outside upload dir (%s) — refusing to serve", inv.id, resolved)
+        raise HTTPException(status_code=404, detail=f"Invoice {invoice_id} document is not accessible")
+
     return FileResponse(
-        path,
+        resolved,
         media_type="application/pdf",
         filename=f"invoice_{inv.id}.pdf",
         headers={"Content-Disposition": f'inline; filename="invoice_{inv.id}.pdf"'},

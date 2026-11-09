@@ -12,6 +12,7 @@ import pytest
 
 from app.schemas.invoice import InvoiceExtraction
 from app.services.llm_extractor import _clean_number, _normalise_numbers
+from app.services.llm_providers.base import ExtractionError, parse_llm_json
 
 
 class TestCleanNumber:
@@ -92,6 +93,40 @@ class TestNormaliseNumbers:
         assert extraction.total_amount == Decimal("60000.00")
         assert extraction.line_items[0].unit_price == Decimal("250.0")
         assert extraction.line_items[1].unit_price == Decimal("100.0")
+
+
+class TestParseLlmJson:
+    """The shared provider JSON repair layer (fenced/prose-wrapped/bare)."""
+
+    def test_fenced_json_parses(self):
+        assert parse_llm_json('```json\n{"invoice_number": "INV-1"}\n```') == {"invoice_number": "INV-1"}
+
+    def test_bare_json_parses(self):
+        assert parse_llm_json('{"invoice_number": "INV-1", "total_amount": "59000.00"}') == {
+            "invoice_number": "INV-1", "total_amount": "59000.00",
+        }
+
+    def test_prose_before_object_is_ignored(self):
+        assert parse_llm_json('Here you go: {"a": 1}') == {"a": 1}
+
+    def test_prose_after_object_is_ignored(self):
+        assert parse_llm_json('{"a": 1} Hope this helps!') == {"a": 1}
+
+    def test_empty_raises(self):
+        with pytest.raises(ExtractionError):
+            parse_llm_json("")
+
+    def test_garbage_raises(self):
+        with pytest.raises(ExtractionError):
+            parse_llm_json("this is not json")
+
+    def test_array_rejected(self):
+        with pytest.raises(ExtractionError):
+            parse_llm_json('[1, 2, 3]')
+
+    def test_still_invalid_after_repair(self):
+        with pytest.raises(ExtractionError):
+            parse_llm_json('{"a": 1,')  # truncated object
 
 
 class TestEndToEndProviderMock:

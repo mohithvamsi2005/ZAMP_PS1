@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 
-from .base import ExtractionError, InvoiceExtractionProvider
+from .base import ExtractionError, InvoiceExtractionProvider, parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -59,18 +59,38 @@ class OpenRouterProvider(InvoiceExtractionProvider):
                         provider="openrouter",
                     )
 
-                data = response.json()
+                try:
+                    data = response.json()
+                except json.JSONDecodeError as exc:
+                    raise ExtractionError(
+                        f"OpenRouter returned a non-JSON response body: {exc}",
+                        provider="openrouter",
+                    ) from exc
                 content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 if not content:
                     raise ExtractionError(
                         "OpenRouter returned empty content",
                         provider="openrouter",
                     )
-                return json.loads(content)
+                return parse_llm_json(content)
 
-            except (json.JSONDecodeError, KeyError, IndexError) as exc:
+            except ExtractionError as exc:
+                # Keep the honest rate-limit message intact — never re-wrap as a parse error
+                if "rate limit" in str(exc).lower():
+                    raise
                 last_error = exc
-                logger.warning("OpenRouter parse error (attempt %d): %s", attempt + 1, exc)
+                logger.warning("OpenRouter extraction error (attempt %d): %s", attempt + 1, exc)
+                if attempt < self.max_retries:
+                    continue
+                raise ExtractionError(
+                    f"Failed to parse OpenRouter response after {self.max_retries + 1} attempts: {exc}",
+                    provider="openrouter",
+                    original_error=exc,
+                ) from exc
+
+            except (KeyError, IndexError) as exc:
+                last_error = exc
+                logger.warning("OpenRouter response shape error (attempt %d): %s", attempt + 1, exc)
                 if attempt < self.max_retries:
                     continue
                 raise ExtractionError(

@@ -810,6 +810,9 @@ def _run_workflow(run_id: str, invoice_id: int) -> tuple[str, Optional[str]]:
             claimed = _claim_run(run_id, db, settings)
         except Exception as exc:
             logger.error("Could not claim run %s: %s", run_id, exc)
+            # Do not leave the run stuck PENDING — a technical failure is FAILED
+            _fail_run(run_id, db, STAGE_RECEIVED,
+                      f"Could not claim the run for processing: {exc}")
             return "FAILED", None
         if not claimed:
             logger.warning("Run %s is not PENDING — skipping (already claimed or finished)", run_id)

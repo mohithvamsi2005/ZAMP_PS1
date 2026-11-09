@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 
-from .base import ExtractionError, InvoiceExtractionProvider
+from .base import ExtractionError, InvoiceExtractionProvider, parse_llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -46,18 +46,35 @@ class LlamaCppProvider(InvoiceExtractionProvider):
                         provider="llama_cpp",
                     )
 
-                data = response.json()
+                try:
+                    data = response.json()
+                except json.JSONDecodeError as exc:
+                    raise ExtractionError(
+                        f"llama.cpp returned a non-JSON response body: {exc}",
+                        provider="llama_cpp",
+                    ) from exc
                 content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
                 if not content:
                     raise ExtractionError(
                         "llama.cpp returned empty content",
                         provider="llama_cpp",
                     )
-                return json.loads(content)
+                return parse_llm_json(content)
 
-            except (json.JSONDecodeError, KeyError, IndexError) as exc:
+            except ExtractionError as exc:
                 last_error = exc
-                logger.warning("llama.cpp parse error (attempt %d): %s", attempt + 1, exc)
+                logger.warning("llama.cpp extraction error (attempt %d): %s", attempt + 1, exc)
+                if attempt < self.max_retries:
+                    continue
+                raise ExtractionError(
+                    f"Failed to parse llama.cpp response after {self.max_retries + 1} attempts: {exc}",
+                    provider="llama_cpp",
+                    original_error=exc,
+                ) from exc
+
+            except (KeyError, IndexError) as exc:
+                last_error = exc
+                logger.warning("llama.cpp response shape error (attempt %d): %s", attempt + 1, exc)
                 if attempt < self.max_retries:
                     continue
                 raise ExtractionError(

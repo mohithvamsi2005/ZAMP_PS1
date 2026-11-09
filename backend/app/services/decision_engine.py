@@ -394,6 +394,41 @@ def decide(input_data: DecisionInput, policy: DecisionPolicy = DEFAULT_POLICY) -
             rules.append(r)
             review_reasons.append(r.explanation)
 
+    # Rule 13d: PO identified by vendor candidacy alone (no reference anywhere
+    # on the invoice, or a low-confidence inferred match) → REVIEW.
+    # The plan calls this out explicitly: candidate PO selection without
+    # document evidence never auto-approves (require_unique_po_candidate).
+    if (policy.review_on_ambiguous_po and
+            input_data.po_match_status == "MATCHED"):
+        method = (input_data.po_match_method or "").upper()
+        confidence = input_data.po_confidence
+        is_bare_candidate = method == "CANDIDATE_VENDOR"
+        is_weak_inferred = (
+            confidence is not None
+            and float(confidence) < 0.9
+            and method != "EXACT_PO_NUMBER"
+        )
+        if is_bare_candidate or is_weak_inferred:
+            r = _rule(
+                rule_id="PO_008",
+                rule_name="PO not evidenced on the invoice",
+                status="WARNING",
+                severity=_SEVERITY_REVIEW,
+                explanation=(
+                    f"No PO reference appeared on the invoice, so the system matched a PO "
+                    f"from vendor context alone (method={input_data.po_match_method}, "
+                    f"confidence={confidence}). A human must confirm that this invoice "
+                    f"corresponds to that purchase order."
+                ),
+                evidence={
+                    "po_reference": input_data.po_reference,
+                    "match_method": input_data.po_match_method,
+                    "confidence": input_data.po_confidence,
+                },
+            )
+            rules.append(r)
+            review_reasons.append(r.explanation)
+
     # Rule 13c: PO present but not OPEN (e.g. AWAITING_APPROVAL, HELD) — REVIEW
     _KNOWN_OPEN_STATUSES = {"OPEN"}
     if input_data.po_match_status == "MATCHED" and input_data.po_status not in _KNOWN_OPEN_STATUSES:
