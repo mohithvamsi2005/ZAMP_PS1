@@ -17,3 +17,10 @@ def check_database() -> DBCheck:
         return DBCheck(connected=True, message="Database connected")
     except Exception as e:
         return DBCheck(connected=False, message=str(e))
+
+
+def test_database_is_reachable():
+    """Real connectivity check against the (isolated, per-conftest) database."""
+    result = check_database()
+    assert result.connected is True
+    assert result.message == "Database connected"

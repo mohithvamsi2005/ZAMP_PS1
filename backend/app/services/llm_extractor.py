@@ -1,6 +1,7 @@
 """LLM-powered invoice extraction orchestrator."""
 import json
 import logging
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Optional
 
@@ -64,6 +65,62 @@ def _repair_json(text: str) -> Optional[str]:
     return stripped
 
 
+# ── Numeric pre-normalisation ────────────────────────────────────────────────
+# Real-world LLM responses to Indian invoices routinely emit values such as
+# "₹1,00,000.00", "INR 1,000", "'null'" strings, or a stray leading glyph
+# (e.g. the ₹ sign transcribed as "I": "I60000.00").  Pydantic's decimal field
+# parsing is strict — it must stay strict — so the messy-but-recoverable case
+# is cleaned *before* validation rather than weakening it.
+
+_NUMERIC_FIELD_KEYS = {
+    "subtotal", "tax_amount", "discount_amount", "total_amount",
+    "quantity", "unit_price", "line_total",
+}
+
+_NON_NUMERIC_CHARS = re.compile(r"[^0-9.\-]")
+
+
+def _clean_number(value):
+    """Best-effort cleanup of one numeric-ish value.
+
+    Keeps only digits, the decimal point and a leading minus; currency glyphs,
+    thousands separators (Western and Indian lakh style) and stray leading
+    letters are dropped.  Returns None when nothing usable remains (e.g. the
+    string "null"), which Pydantic maps to an unset field instead of failing.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return value
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if stripped.lower() in ("null", "none", "n/a", ""):
+        return None
+    cleaned = _NON_NUMERIC_CHARS.sub("", stripped)
+    if cleaned in ("", "-", ".", "-.", ".-", "--"):
+        return None
+    # Keep a single leading minus
+    sign = "-" if cleaned.startswith("-") else ""
+    body = cleaned.lstrip("-").replace("-", "")
+    cleaned = sign + body
+    return cleaned
+
+
+def _normalise_numbers(node: object) -> object:
+    """Recursively clean every known numeric field in an LLM JSON payload."""
+    if isinstance(node, dict):
+        for key, value in list(node.items()):
+            if key in _NUMERIC_FIELD_KEYS:
+                node[key] = _clean_number(value)
+            elif key == "line_items":
+                node[key] = _normalise_numbers(value)
+        return node
+    if isinstance(node, list):
+        return [_normalise_numbers(item) for item in node]
+    return node
+
+
 def _parse_decimal(value) -> Optional[Decimal]:
     """Safely parse a value to Decimal."""
     if value is None:
@@ -117,14 +174,14 @@ def extract_invoice_from_text(
 
     # Parse response into schema
     try:
-        extraction = InvoiceExtraction(**raw_response)
+        extraction = InvoiceExtraction(**_normalise_numbers(raw_response))
     except Exception as exc:
         logger.warning("Schema validation failed on raw LLM output: %s — attempting repair", exc)
         # Retry once with repaired JSON
         for attempt in range(provider.max_retries):
             repaired = _repair_json(json.dumps(raw_response, default=str))
             try:
-                parsed = json.loads(repaired)
+                parsed = _normalise_numbers(json.loads(repaired))
                 extraction = InvoiceExtraction(**parsed)
                 break
             except Exception as repair_exc:

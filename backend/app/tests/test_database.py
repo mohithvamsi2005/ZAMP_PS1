@@ -18,6 +18,8 @@ from app.db.models import (
 @pytest.fixture(scope="function")
 def db_session():
     """Fresh database session for each test."""
+    from app.db.models import Base
+    Base.metadata.drop_all(bind=engine)  # clear stale state from prior runs
     init_db()
     enable_sqlite_foreign_keys(SessionLocal())
     session = SessionLocal()

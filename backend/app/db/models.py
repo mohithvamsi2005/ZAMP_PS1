@@ -48,6 +48,7 @@ class RunEventStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     WARNING = "WARNING"
     FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
 
 
 # ── Vendors ──────────────────────────────────────────────────────────────────
@@ -247,6 +248,16 @@ class ProcessingRun(Base):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Structured JSON outputs for full audit trail
+    extraction_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    document_meta_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    vendor_match_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    po_match_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    duplicate_check_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    amount_validation_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    line_item_validation_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tax_validation_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    decision_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

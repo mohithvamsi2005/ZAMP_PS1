@@ -5,6 +5,10 @@ from app.core.config import get_settings
 from app.core.logging import setup_logging
 from app.api.routes_health import router as health_router
 from app.api.routes_extraction import router as extraction_router
+from app.api.routes_matching import router as matching_router
+from app.api.routes_decision import router as decision_router
+from app.api.routes_uploads import router as upload_router
+from app.api.routes_runs import router as runs_router
 
 settings = get_settings()
 setup_logging()
@@ -12,7 +16,7 @@ setup_logging()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.db.session import engine, Base, init_db
+    from app.db.session import init_db
     init_db()
     print(f"Backend started — provider={settings.llm_provider}, db={settings.database_url}")
     yield
@@ -35,3 +39,7 @@ app.add_middleware(
 
 app.include_router(health_router)
 app.include_router(extraction_router)
+app.include_router(matching_router)
+app.include_router(decision_router)
+app.include_router(upload_router)
+app.include_router(runs_router)

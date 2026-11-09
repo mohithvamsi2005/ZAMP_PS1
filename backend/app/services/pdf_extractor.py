@@ -109,4 +109,12 @@ def validate_pdf(path: Path, max_upload_mb: int = 20) -> List[str]:
     size = path.stat().st_size
     if size > max_bytes:
         errors.append(f"File exceeds maximum size ({max_upload_mb} MB): {size / 1024 / 1024:.1f} MB")
+    if size == 0:
+        errors.append("File is empty")
+    # Structural check: a real PDF always starts with the %PDF- header, so
+    # garbage bytes (or a renamed HTML/text file) are rejected before storage.
+    with open(path, "rb") as fh:
+        magic = fh.read(8)
+    if size > 0 and not magic.startswith(b"%PDF-"):
+        errors.append("File is not a valid PDF (missing %PDF header — probably not a real PDF)")
     return errors

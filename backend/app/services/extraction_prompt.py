@@ -11,7 +11,7 @@ INVOICE_EXTRACTION_PROMPT = """You are an invoice information extraction system.
 5. Distinguish clearly between: subtotal, tax/VAT amount, discount amount, and final total. Do not conflate them.
 6. Extract every line item you can identify. Include description, quantity, unit (if present), unit price, and line total.
 7. Return null for any field that is genuinely absent or unreadable from the document.
-8. Provide supporting evidence (the exact text snippet from the invoice) for each non-null important field so results can be audited.
+8. Provide supporting evidence (the exact text snippet from the invoice), its page number, and a 0-1 confidence estimate for each non-null important field so results can be audited.
 9. Do NOT make any approval, rejection, or matching decision. You are an extraction system only.
 10. Return valid JSON only — no markdown code fences, no explanation outside the JSON object.
 
@@ -30,7 +30,7 @@ Return a JSON object with these fields:
 - discount_amount (decimal number as string or null)
 - total_amount (decimal number as string or null)
 - line_items (array of objects with description, sku, quantity, unit, unit_price, line_total — each may be null except description)
-- evidence (object mapping field names to {{text: "...", page: N}} when available)
+- evidence (object mapping field names to {{"text": "...", "page": N, "confidence": <0-1 float>}} when available; confidence is your estimate of extraction reliability for that field, 0.0–1.0 — include it for every non-null critical field: invoice_number, vendor_name, total_amount)
 - extraction_status ("SUCCESS" | "PARTIAL" | "FAILED")
 - warnings (array of strings describing any ambiguity or missing fields)
 
