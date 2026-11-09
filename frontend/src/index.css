@@ -563,6 +563,51 @@ table { border-collapse: collapse; }
 
 .key { font-family: var(--mono); font-size: var(--fs-mono); background: var(--surface-sunken); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; word-break: break-all; }
 
+/* ── Login screen (auth gate) ────────────────────────────────────────── */
+
+.login-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: #10202b;
+  padding: 24px;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  box-shadow: 0 12px 40px rgba(2, 10, 16, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-brand { display: flex; gap: 12px; align-items: center; margin-bottom: 4px; }
+.login-brand-name { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
+.login-brand-sub { font-size: 10px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); margin-top: 2px; }
+
+.login-title { font-size: 21px; font-weight: 650; letter-spacing: -0.02em; margin-top: 6px; }
+.login-sub { font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+
+.password-wrap { position: relative; }
+.password-input { padding-left: 34px; padding-right: 40px; }
+.password-lock { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--faint); }
+.password-toggle {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  padding: 6px; border-radius: 6px; color: var(--muted);
+}
+.password-toggle:hover { background: var(--surface-sunken); color: var(--text); }
+
+.login-submit { width: 100%; justify-content: center; min-height: 42px; font-size: 14px; }
+
+.login-foot {
+  display: flex; gap: 8px; align-items: center; justify-content: center;
+  font-size: 11px; color: var(--faint); margin-top: 2px;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────────── */
 
 @media (max-width: 1180px) {

@@ -103,6 +103,11 @@ def _clean_number(value):
     # Keep a single leading minus
     sign = "-" if cleaned.startswith("-") else ""
     body = cleaned.lstrip("-").replace("-", "")
+    # A second decimal point (e.g. "500.00.") is a formatting slip, not a value
+    # — keep the first decimal point, discard the rest.
+    if body.count(".") > 1:
+        first = body.find(".")
+        body = body[: first + 1] + body[first + 1 :].replace(".", "")
     cleaned = sign + body
     return cleaned
 
@@ -146,7 +151,12 @@ def extract_invoice_from_text(
             warnings=["No LLM provider configured — returning empty extraction"],
         )
 
-    prompt_msgs = build_extraction_prompt(invoice_text, model_name=provider.model)
+    # Small quantised llama.cpp models fail reliably under the rich
+    # evidence-annotated prompt (they drop invoice_number or swap fields);
+    # always use the compact schema for them.
+    settings = get_settings()
+    compact = settings.llm_provider.strip().lower() in ("llamacpp", "llama_cpp")
+    prompt_msgs = build_extraction_prompt(invoice_text, model_name=provider.model, compact=compact)
 
     # First attempt
     raw_response: Optional[dict] = None

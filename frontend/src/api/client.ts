@@ -99,6 +99,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}, opts: Re
     clearTimeout(timeoutId);
 
     if (!resp.ok) {
+      // Any 401 flips the app back to the login gate (single-tenant console)
+      if (resp.status === 401 && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('zamp:unauthenticated'));
+      }
       const detail = await tryParseDetail(resp);
       throw new ApiError(codeForStatus(resp.status), resp.status, messageForStatus(resp.status, detail), detail);
     }

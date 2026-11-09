@@ -1,4 +1,14 @@
-"""Extraction prompt template for invoice PDFs."""
+"""Extraction prompt templates for invoice PDFs.
+
+Two templates ship:
+* INVOICE_EXTRACTION_PROMPT — full, evidence-annotated schema for capable models
+  (production OpenRouter / llama.cpp 30B+).
+* COMPACT_INVOICE_EXTRACTION_PROMPT — minimal, flat schema WITHOUT the
+  per-field evidence block. Required for small quantised models (qwen2.5:1.5b
+  class) that systematically drop invoice_number or hallucinate a swapped field
+  when the required JSON shape grows beyond a handful of keys.
+Prompt selection is driven by provider: llama.cpp → compact, openrouter → full.
+"""
 
 INVOICE_EXTRACTION_PROMPT = """You are an invoice information extraction system. Your task is to extract structured data from the following invoice text and return ONLY valid JSON matching the schema below.
 
@@ -40,10 +50,42 @@ Return a JSON object with these fields:
 """
 
 
-def build_extraction_prompt(invoice_text: str, model_name: str = "") -> dict:
-    """Build the system/user messages for an LLM extraction request."""
-    # Use .format() with invoice_text; literal braces in the template are already escaped as {{ and }}
-    prompt = INVOICE_EXTRACTION_PROMPT.format(invoice_text=invoice_text)
+COMPACT_INVOICE_EXTRACTION_PROMPT = """Extract invoice data from the text below. Return ONLY valid JSON, no markdown fences.
+
+Schema:
+{{"invoice_number": string|null, "invoice_date": string|null, "due_date": string|null,
+  "currency": string|null, "po_reference": string|null, "vendor_name": string|null,
+  "vendor_tax_id": string|null, "subtotal": string|null, "tax_amount": string|null,
+  "discount_amount": string|null, "total_amount": string|null,
+  "line_items": [{{"description": string, "sku": string|null, "quantity": string|null,
+    "unit": string|null, "unit_price": string|null, "line_total": string|null}}],
+  "evidence": {{
+    "invoice_number": {{"text": string, "page": integer, "confidence": number}},
+    "vendor_name":     {{"text": string, "page": integer, "confidence": number}},
+    "total_amount":    {{"text": string, "page": integer, "confidence": number}}
+  }},
+  "extraction_status": "SUCCESS"|"PARTIAL"|"FAILED", "warnings": [string]}}
+
+Rules: use null for genuinely missing fields. Money as plain strings ("50000.00").
+Dates in ISO format. Do not invent values.
+
+The evidence object is REQUIRED and must include exactly the three keys shown
+(invoice_number, vendor_name, total_amount) — each quoting the invoice line as
+"text" (page 1) and a confidence 0.0–1.0. Do not skip it.
+
+Invoice:
+{invoice_text}
+"""
+
+
+def build_extraction_prompt(invoice_text: str, model_name: str = "", compact: bool = False) -> dict:
+    """Build the system/user messages for an LLM extraction request.
+
+    `compact=True` selects the flat schema for small quantised llama.cpp models;
+    `compact=False` (default) keeps the full evidence-annotated schema.
+    """
+    template = COMPACT_INVOICE_EXTRACTION_PROMPT if compact else INVOICE_EXTRACTION_PROMPT
+    prompt = template.format(invoice_text=invoice_text)
     return {
         "system": (
             "You are a precise invoice data extraction assistant. "

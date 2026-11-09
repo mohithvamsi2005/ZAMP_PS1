@@ -264,7 +264,12 @@ export interface DashboardSummary {
   latest_failed_runs: RecentRun[];
 }
 
-// ── Health ───────────────────────────────────────────────────────────────────
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+export interface AuthStatus {
+  required: boolean;
+  authenticated: boolean;
+}
 
 export interface HealthResponse {
   status: string;

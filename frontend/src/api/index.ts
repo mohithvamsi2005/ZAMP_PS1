@@ -24,3 +24,4 @@ export {
 } from '../api/runs';
 export type { RunListParams } from '../api/runs';
 export { fetchHealth } from '../api/health';
+export { fetchAuthStatus, loginWithPassword, logout } from '../api/auth';
