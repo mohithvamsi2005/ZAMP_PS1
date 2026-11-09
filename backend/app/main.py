@@ -9,6 +9,7 @@ from app.api.routes_matching import router as matching_router
 from app.api.routes_decision import router as decision_router
 from app.api.routes_uploads import router as upload_router
 from app.api.routes_runs import router as runs_router
+from app.api.routes_dashboard import router as dashboard_router
 
 settings = get_settings()
 setup_logging()
@@ -43,3 +44,4 @@ app.include_router(matching_router)
 app.include_router(decision_router)
 app.include_router(upload_router)
 app.include_router(runs_router)
+app.include_router(dashboard_router)

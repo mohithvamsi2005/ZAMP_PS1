@@ -24,3 +24,17 @@ def test_database_is_reachable():
     result = check_database()
     assert result.connected is True
     assert result.message == "Database connected"
+
+
+def test_health_endpoint_exposes_config_without_secrets(client=None):
+    """/health must return provider KIND and model name — never the API key."""
+    import json
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    resp = TestClient(app).get("/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert set(body) == {"status", "service", "database", "llm_provider", "llm_model"}
+    assert "sk-" not in json.dumps(body).lower()  # no key-shaped material anywhere
+

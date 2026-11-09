@@ -8,6 +8,7 @@ router = APIRouter(prefix="/health", tags=["health"])
 
 @router.get("", response_model=HealthResponse)
 def health_check() -> dict:
+    from app.core.config import get_settings
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
@@ -15,10 +16,13 @@ def health_check() -> dict:
     except Exception:
         db_status = "disconnected"
 
+    settings = get_settings()
     return HealthResponse(
         status="ok" if db_status == "connected" else "degraded",
         service="zamp-invoice-intelligence",
         database=db_status,
+        llm_provider=settings.llm_provider,
+        llm_model=settings.llm_model,
     )
 
 
