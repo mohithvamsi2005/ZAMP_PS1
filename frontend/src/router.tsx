@@ -9,20 +9,27 @@ import ReviewQueue from './pages/ReviewQueue';
 import History from './pages/History';
 import NotFound from './pages/NotFound';
 
-export const router = createBrowserRouter([
+export const router = createBrowserRouter(
+  [
+    {
+      path: '/',
+      element: <AppShell />,
+      children: [
+        { index: true, element: <Overview /> },
+        { path: 'invoices', element: <Invoices /> },
+        { path: 'invoices/:invoiceId', element: <InvoiceDetails /> },
+        { path: 'upload', element: <UploadInvoice /> },
+        { path: 'processing/:runId', element: <ProcessingRun /> },
+        { path: 'review', element: <ReviewQueue /> },
+        { path: 'runs', element: <History /> },
+        { path: 'history', loader: () => redirect('/runs') },
+        { path: '*', element: <NotFound /> },
+      ],
+    },
+  ],
   {
-    path: '/',
-    element: <AppShell />,
-    children: [
-      { index: true, element: <Overview /> },
-      { path: 'invoices', element: <Invoices /> },
-      { path: 'invoices/:invoiceId', element: <InvoiceDetails /> },
-      { path: 'upload', element: <UploadInvoice /> },
-      { path: 'processing/:runId', element: <ProcessingRun /> },
-      { path: 'review', element: <ReviewQueue /> },
-      { path: 'runs', element: <History /> },
-      { path: 'history', loader: () => redirect('/runs') },
-      { path: '*', element: <NotFound /> },
-    ],
+    future: {
+      v7_relativeSplatPath: true,
+    },
   },
-]);
+)

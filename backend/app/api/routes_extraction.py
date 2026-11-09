@@ -1,5 +1,5 @@
 """Diagnostic extraction endpoint for Phase 3 testing."""
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional
@@ -8,12 +8,15 @@ import logging
 import os
 
 from app.core.config import get_settings
+from app.core.security import require_write_access, make_rate_limit
 from app.services.pdf_extractor import extract_pdf, validate_pdf, sha256_file
 from app.services.ocr_service import OCRService
 from app.services.llm_extractor import extract_invoice
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/diagnostic", tags=["diagnostic"])
+# Guarded: burns LLM quota — token-or-loopback access control
+router = APIRouter(prefix="/api/diagnostic", tags=["diagnostic"],
+                   dependencies=[Depends(require_write_access)])
 
 
 class ExtractionResult(BaseModel):
@@ -42,7 +45,11 @@ class PDFMetadata(BaseModel):
 
 
 @router.post("/extract")
-async def diagnostic_extract(file: UploadFile = File(...)):
+async def diagnostic_extract(
+    request: Request,
+    file: UploadFile = File(...),
+    _gate: None = Depends(make_rate_limit("diagnostic", "diagnostic")),
+):
     """Upload a PDF and run the full extraction pipeline (no DB write).
 
     Returns extracted data + processing metadata for inspection.
@@ -108,7 +115,6 @@ async def diagnostic_health():
     settings = get_settings()
     return {
         "provider": settings.llm_provider,
-        "base_url": settings.llm_base_url,
         "model": settings.llm_model,
         "timeout_seconds": settings.llm_timeout_seconds,
         "max_retries": settings.llm_max_retries,

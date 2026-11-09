@@ -41,7 +41,7 @@ from app.db.models import (
     ProcessingRunStatus, PurchaseOrder, RunEventStatus, Vendor,
 )
 from app.db.session import SessionLocal
-from app.schemas.decision import DecisionInput, DecisionResult
+from app.schemas.decision import DecisionInput, DecisionResult, RuleEvaluation
 from app.schemas.invoice import ExtractionMetadata, InvoiceExtraction
 from app.schemas.matching import (
     AmountValidationResult, DuplicateResult, LineItemValidationResult,
@@ -729,19 +729,92 @@ def _stage_decision(
     return decision_result
 
 
+def _downgrade_amount_to_review(decision_result: DecisionResult, recheck) -> DecisionResult:
+    """Rewrite an APPROVE decision as REVIEW because the PO balance moved.
+
+    Happens when, between stage-7 amount validation and the persistence commit,
+    a concurrent worker consumed the remaining PO balance (the classic
+    at-least-one-number race). The safe outcome is REVIEW — never a silent
+    double-billing APPROVE.
+    """
+    recheck_explanation = (
+        recheck.explanation if recheck else
+        "Balance re-validation at approval time could not be completed"
+    )
+    new_rule = RuleEvaluation(
+        rule_id="AMOUNT_003",
+        rule_name="Balance re-verified at approval time",
+        status="WARNING",
+        severity="REVIEW",
+        explanation=f"PO balance changed between decision and persistence: {recheck_explanation}",
+        evidence={
+            "invoice_amount": str(recheck.invoice_amount) if recheck else None,
+            "recheck_status": recheck.status if recheck else "UNKNOWN",
+            "remaining_po_balance": recheck.remaining_po_balance if recheck else None,
+            "previously_approved_invoiced": recheck.previously_approved_invoiced if recheck else None,
+        },
+    )
+    rules = list(decision_result.rules_evaluated) + [new_rule]
+    return DecisionResult(
+        decision="REVIEW",
+        policy_version=decision_result.policy_version,
+        summary=(
+            "Invoice requires human verification: PO balance changed during "
+            "processing — approval not safe at persistence time"
+        ),
+        rules_evaluated=rules,
+        hard_failures=list(decision_result.hard_failures),
+        review_reasons=list(decision_result.review_reasons) + [new_rule.explanation],
+        approval_eligible=False,
+    )
+
+
 def _stage_persistence(
     run_id: str, db: Session, inv: Invoice, settings,
     extraction: InvoiceExtraction, pdf_metadata: ExtractionMetadata,
     vendor_result, po_result, dup_result, amount_result,
     line_item_result, tax_result, decision_result: DecisionResult,
-):
-    """Stage 11 — persist every output required to reconstruct the run."""
+) -> DecisionResult:
+    """Stage 11 — persist every output required to reconstruct the run.
+
+    Returns the (possibly downgraded) decision so the background task reports
+    the same outcome that is written to the database.
+    """
     _event(run_id, db, STAGE_PERSISTENCE, RunEventStatus.RUNNING,
            "Persisting decision and supporting evidence")
 
     run = db.get(ProcessingRun, run_id)
     if run is None:
         raise RuntimeError("processing run disappeared before result persistence")
+
+    # ── TOCTOU guard (concurrent overbilling) ─────────────────────────────
+    # Stage-7 validated the balance against a snapshot. Between then and now a
+    # concurrent worker may have consumed the remaining PO balance. Re-check
+    # the committed balance under SQLite's reserved write lock before an
+    # APPROVE may be recorded — otherwise two simultaneous uploads over the PO
+    # could both "fit" against the same stale snapshot.
+    po_id = po_result.matched_po.id if (po_result and po_result.matched_po) else None
+    if po_id is not None and decision_result.decision == "APPROVE":
+        recheck = None
+        try:
+            from sqlalchemy import text
+            # No-op write: takes the SQLite RESERVED lock for this connection
+            db.execute(text("UPDATE purchase_orders SET id = id WHERE id = :po_id"),
+                       {"po_id": po_id})
+            recheck = validate_amount(
+                invoice_total=_safe_decimal(extraction.total_amount),
+                po_id=po_id,
+                currency=extraction.currency,
+                exclude_invoice_id=inv.id,
+            )
+        except Exception as exc:
+            logger.warning("Persistence-time balance re-check failed (%s) — downgrading to REVIEW", exc)
+            recheck = None
+        if recheck is None or recheck.status != "PASS":
+            decision_result = _downgrade_amount_to_review(decision_result, recheck)
+            _event(run_id, db, STAGE_DECISION, RunEventStatus.WARNING,
+                   "Balance re-verified at approval time — decision downgraded to REVIEW",
+                   {"reason": recheck.explanation if recheck else "re-check failed"})
 
     run.status = ProcessingRunStatus.COMPLETED
     run.decision = decision_result.decision  # business decision only
@@ -768,6 +841,7 @@ def _stage_persistence(
     _event(run_id, db, STAGE_COMPLETED, RunEventStatus.COMPLETED,
            f"Processing complete — decision: {decision_result.decision}",
            {"decision": decision_result.decision})
+    return decision_result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -909,7 +983,7 @@ def _run_workflow(run_id: str, invoice_id: int) -> tuple[str, Optional[str]]:
 
         # ── 11. Persist result + complete ───────────────────────────────────
         try:
-            _stage_persistence(
+            decision_result = _stage_persistence(
                 run_id, db, inv, settings, extraction, metadata, vendor_result,
                 po_result, dup_result, amount_result, line_item_result,
                 tax_result, decision_result,

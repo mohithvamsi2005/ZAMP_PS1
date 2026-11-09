@@ -11,11 +11,12 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Depends
 from pydantic import BaseModel
 
 from app.services.run_store import get_run, get_run_events, list_runs
 from app.services.workflow import process_invoice_background, retry_failed_run
+from app.core.security import require_write_access
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -167,7 +168,11 @@ async def get_run_result(run_id: str):
 
 @router.post("/{run_id}/retry", response_model=RetryResponse,
              summary="Re-queue a failed run for another processing attempt")
-async def retry_run(run_id: str, background_tasks: BackgroundTasks = None):
+async def retry_run(
+    run_id: str,
+    background_tasks: BackgroundTasks = None,
+    _access: None = Depends(require_write_access),
+):
     data = get_run(run_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Processing run {run_id} not found")

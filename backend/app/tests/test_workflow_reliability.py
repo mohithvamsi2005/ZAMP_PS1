@@ -310,6 +310,84 @@ class TestRetrySafety:
         assert retry_failed_run(run_id) is False  # PENDING→ cannot reset (not FAILED)
 
 
+class TestPersistenceDowngrade:
+    def test_balance_changed_during_processing_downgrades_to_review(self, monkeypatch, seeded, tmp_path):
+        """Simulate a concurrent worker draining the PO balance between stage-7
+        (validation) and stage-11 (persistence). The persistence-time re-check
+        must downgrade the APPROVE to REVIEW with an AMOUNT_003 rule."""
+        from app.schemas.decision import DecisionResult, RuleEvaluation
+        from app.schemas.matching import AmountValidationResult
+
+        pdf_path = tmp_path / "downgrade.pdf"
+        create_digital_invoice(
+            pdf_path, invoice_number="INV-DG-1", vendor_name="Reliability Vendor Ltd",
+            po_ref="PO-REL-1",
+        )
+
+        amount_calls = []
+
+        def fake_validate(invoice_total, po_id=None, currency=None, exclude_invoice_id=None):
+            amount_calls.append((invoice_total, po_id))
+            if len(amount_calls) == 1:
+                return AmountValidationResult(
+                    check_name="Amount validation", status="PASS",
+                    po_total="90000.00", previously_approved_invoiced="0.00",
+                    invoice_amount=str(invoice_total),
+                    remaining_po_balance="90000.00",
+                    tolerance_absolute="100.00", tolerance_percent=1.0,
+                    explanation="first validation: fits fine",
+                    metadata={"provisional": False},
+                )
+            return AmountValidationResult(
+                check_name="Amount validation", status="FAIL",
+                po_total="90000.00", previously_approved_invoiced="50000.00",
+                invoice_amount=str(invoice_total),
+                remaining_po_balance="40000.00",
+                difference="50000.00",
+                tolerance_absolute="100.00", tolerance_percent=1.0,
+                explanation="second validation: someone else consumed 50000 already",
+                metadata={"provisional": False},
+            )
+
+        monkeypatch.setattr("app.services.workflow.validate_amount", fake_validate)
+
+        def fake_decide(input_data, policy=None):
+            return DecisionResult(
+                decision="APPROVE", policy_version="1.0",
+                summary="auto-approved (fixture)",
+                rules_evaluated=[RuleEvaluation(
+                    rule_id="APPROVE_001", rule_name="All mandatory checks passed",
+                    status="PASS", severity="INFO",
+                    explanation="fixture rule", evidence={},
+                )],
+                hard_failures=[], review_reasons=[], approval_eligible=True,
+            )
+
+        monkeypatch.setattr("app.services.workflow.decide", fake_decide)
+        monkeypatch.setattr(
+            "app.services.workflow.extract_invoice_from_text",
+            lambda ft, md: _good_extraction(),
+        )
+
+        contents = pdf_path.read_bytes()
+        invoice_id, run_id = create_invoice_and_run(contents, "downgrade.pdf")
+        process_invoice_background(run_id, invoice_id)
+
+        run = _get_run(run_id)
+        # The persisted decision must be the DOWNGRADED one
+        assert run.decision.value == "REVIEW"
+        data = get_run(run_id)
+        assert data["decision"] == "REVIEW"
+        assert data["status"] == "COMPLETED"
+        rule_ids = [r["rule_id"] for r in data["decision_result"]["rules_evaluated"]]
+        assert "AMOUNT_003" in rule_ids
+        # The stage-7 PASS evidence is still stored, but the downgrade is honest
+        assert "50000" in (data["decision_result"]["review_reasons"] or [""])[-1]
+        assert data["amount_validation"]["status"] == "PASS"  # snapshot at stage 7 (documented)
+        # At least three validate calls happened: 1 at stage 10... none — 1 at stage 7, 1 at persistence
+        assert len(amount_calls) >= 2
+
+
 class TestUploadValidationBoundaries:
     def test_upload_filename_never_used_as_path(self, monkeypatch, tmp_path, seeded):
         """A traversal filename must not escape storage — verify path is server-generated."""

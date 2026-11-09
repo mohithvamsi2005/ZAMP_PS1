@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     upload_dir: str = "./data/uploads"
     max_upload_mb: int = 20
 
+    # Access control (Phase-8 hardening) — see app/core/security.py
+    # When write_token is set, guarded endpoints require the X-Zamp-Token header.
+    # When empty, guarded endpoints only serve loopback clients.
+    write_token: str = ""
+    diagnostic_rate_per_minute: int = 10
+    upload_rate_per_minute: int = 30
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 

@@ -13,7 +13,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile, Request, Depends
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -23,6 +23,7 @@ from app.services.run_store import get_invoice, list_invoices
 from app.services.pdf_extractor import validate_pdf
 from app.db.session import SessionLocal
 from app.db.models import Invoice
+from app.core.security import require_write_access, make_rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/invoices", tags=["invoices"])
@@ -108,6 +109,8 @@ class InvoiceDetail(BaseModel):
 async def upload_invoice(
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None,
+    _access: None = Depends(require_write_access),
+    _gate: None = Depends(make_rate_limit("upload", "upload")),
 ):
     """Accept a multipart PDF upload, create the invoice + run records and
     start background processing. Poll GET /api/runs/{run_id} for live status.

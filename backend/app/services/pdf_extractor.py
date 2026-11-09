@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from typing import List, Optional, Tuple
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF (phase-8: stop using the deprecated fitz shim)
 
 from app.schemas.invoice import ExtractionMetadata
 

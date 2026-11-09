@@ -3,7 +3,7 @@ import io
 import logging
 from typing import List, Optional
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF (phase-8: stop using the deprecated fitz shim)
 from PIL import Image
 import pytesseract
 
