@@ -1,12 +1,15 @@
 """Generate synthetic verification invoices and run live E2E verification.
 
-Generates five realistic test PDFs matched against the seeded vendors/POs in
+Generates eight realistic test PDFs matched against the seeded vendors/POs in
 ``backend/data/demo.db``:
-  1. syn_01_clean_approve.pdf       — Clean invoice matching PO-2044 (V-001)
-  2. syn_02_blocked_vendor.pdf      — Blocked vendor invoice on PO-2047 (V-004 -> REJECT)
-  3. syn_03_overbilling.pdf         — Exceeds PO-2045 balance & qty (V-002 -> REVIEW)
-  4. syn_04_scanned_ocr.pdf         — Image-only scanned PDF for Tesseract OCR + PO-2046 (V-005)
-  5. syn_05_duplicate_copy.pdf      — Exact byte-for-byte duplicate of #1 (DOC_DUP_001 -> REJECT)
+  1. syn_01_clean_approve.pdf              — Clean invoice matching PO-2044 (V-001 -> APPROVE)
+  2. syn_02_blocked_vendor.pdf             — Blocked vendor invoice on PO-2047 (V-004 -> REJECT)
+  3. syn_03_overbilling.pdf                — Exceeds PO-2045 balance & qty (V-002 -> REVIEW)
+  4. syn_04_scanned_ocr.pdf                — Image-only scanned PDF for Tesseract OCR + PO-2046 (V-005)
+  5. syn_05_duplicate_copy.pdf             — Exact byte-for-byte duplicate of #1 (DOC_DUP_001 -> REJECT)
+  6. syn_06_clean_po2045_approve.pdf       — Clean 4-line match against PO-2045 (V-002 -> APPROVE)
+  7. syn_07_closed_po_review.pdf           — Matching items on CLOSED PO-2043 (V-003 -> REVIEW: PO_005)
+  8. syn_08_unknown_vendor_tax_mismatch.pdf — Unregistered vendor, unknown PO & math error (-> REVIEW)
 
 Usage:
     cd backend
@@ -63,9 +66,10 @@ def _draw_digital_invoice(
         f"Due Date: {due_date}",
         f"Currency: {currency}",
         f"Vendor Name: {vendor_name}",
-        f"Vendor GST: {vendor_gst}",
-        f"Purchase Order: {po_reference}",
     ]
+    if vendor_gst:
+        header_lines.append(f"Vendor GST: {vendor_gst}")
+    header_lines.append(f"Purchase Order: {po_reference}")
     for line in header_lines:
         c.drawString(20 * mm, y, line)
         y -= 6.5 * mm
@@ -221,7 +225,65 @@ def generate_all(output_dir: Path = OUT_DIR) -> list[Path]:
     p5 = output_dir / "syn_05_duplicate_copy.pdf"
     shutil.copyfile(p1, p5)
 
-    return [p1, p2, p3, p4, p5]
+    p6 = _draw_digital_invoice(
+        output_dir / "syn_06_clean_po2045_approve.pdf",
+        invoice_number="INV-SYN-2026-006",
+        invoice_date="2026-11-11",
+        due_date="2026-12-11",
+        vendor_name="XYZ Metals and Alloys",
+        vendor_gst="27AABBX5678D1Z3",
+        po_reference="PO-2045",
+        currency="INR",
+        line_items=[
+            ("Aluminum angle section 50x50", "80", "pieces", "600.00", "48000.00"),
+            ("Steel channel 75mm", "60", "pieces", "550.00", "33000.00"),
+            ("Mild steel plate 10mm", "20", "sheets", "450.00", "9000.00"),
+            ("Surface treatment coating", "30", "liters", "300.00", "9000.00"),
+        ],
+        subtotal="99000.00",
+        tax_label="Tax (0%)",
+        tax_amount="0.00",
+        total_amount="99000.00",
+    )
+
+    p7 = _draw_digital_invoice(
+        output_dir / "syn_07_closed_po_review.pdf",
+        invoice_number="INV-SYN-2026-007",
+        invoice_date="2026-11-11",
+        due_date="2026-12-11",
+        vendor_name="Delta Supply Chain Solutions",
+        vendor_gst="",
+        po_reference="PO-2043",
+        currency="INR",
+        line_items=[
+            ("Industrial valve, 4-inch ball valve", "20", "units", "8500.00", "170000.00"),
+            ("Flange gasket set", "50", "sets", "1600.00", "80000.00"),
+        ],
+        subtotal="250000.00",
+        tax_label="Tax (0%)",
+        tax_amount="0.00",
+        total_amount="250000.00",
+    )
+
+    p8 = _draw_digital_invoice(
+        output_dir / "syn_08_unknown_vendor_tax_mismatch.pdf",
+        invoice_number="INV-SYN-2026-008",
+        invoice_date="2026-11-11",
+        due_date="2026-12-11",
+        vendor_name="Apex Robotics Solutions Pvt Ltd",
+        vendor_gst="29AABCR9999P1Z1",
+        po_reference="PO-9910",
+        currency="INR",
+        line_items=[
+            ("Servo motor assembly 400W", "40", "pcs", "1000.00", "40000.00"),
+        ],
+        subtotal="40000.00",
+        tax_label="Tax (18% GST)",
+        tax_amount="7200.00",
+        total_amount="45000.00",
+    )
+
+    return [p1, p2, p3, p4, p5, p6, p7, p8]
 
 
 def verify_live(base_url: str, files: list[Path]) -> int:
