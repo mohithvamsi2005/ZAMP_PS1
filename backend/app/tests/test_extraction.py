@@ -258,6 +258,28 @@ class TestOpenRouterProvider:
         with pytest.raises(ExtractionError):
             provider.extract_invoice("s", "u")
 
+    def test_nemotron_sets_reasoning_effort_none(self, monkeypatch, mock_httpx_post):
+        captured = []
+
+        def fake_post(self, url, json=None, headers=None, **kw):
+            captured.append(json)
+            body = {"choices": [{"message": {"content": "{\"invoice_number\": \"INV-N\"}"}}]}
+            return mock_httpx_post(body)
+
+        monkeypatch.setattr("httpx.Client.post", fake_post)
+        nem = OpenRouterProvider(
+            base_url="http://mock:1/v1", api_key="",
+            model="nvidia/nemotron-3-ultra-550b-a55b:free", timeout_seconds=5, max_retries=0,
+        )
+        nem.extract_invoice("s", "u")
+        other = OpenRouterProvider(
+            base_url="http://mock:1/v1", api_key="",
+            model="google/gemma-2-9b-it:free", timeout_seconds=5, max_retries=0,
+        )
+        other.extract_invoice("s", "u")
+        assert captured[0].get("reasoning") == {"effort": "none"}
+        assert "reasoning" not in captured[1]
+
 
 class TestLlamaCppProvider:
     def test_successful_extraction(self, monkeypatch, mock_httpx_post):

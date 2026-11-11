@@ -55,6 +55,26 @@ class TestLoopbackDefault:
         finally:
             settings.write_token = original
 
+    def test_authenticated_session_allowed_off_loopback(self):
+        from app.core.auth import SESSION_COOKIE, make_session_value
+
+        settings = get_settings()
+        orig_pw = settings.auth_password
+        orig_tok = settings.write_token
+        settings.auth_password = "cloud-demo-password"
+        settings.write_token = ""
+        try:
+            with pytest.raises(HTTPException) as exc:
+                require_write_access(_request("9.9.9.9"))
+            assert exc.value.status_code == 403
+
+            cookie_val = make_session_value()
+            require_write_access(_request("9.9.9.9", {"cookie": f"{SESSION_COOKIE}={cookie_val}"}))
+            require_write_access(_request("9.9.9.9", {"authorization": "Bearer cloud-demo-password"}))
+        finally:
+            settings.auth_password = orig_pw
+            settings.write_token = orig_tok
+
     def test_rate_limiter_sliding_window(self):
         reset_rate_limiter()
         for _ in range(5):

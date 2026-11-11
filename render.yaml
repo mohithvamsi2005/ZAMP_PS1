@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: zamp-invoice-intelligence
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        value: sqlite:///./data/demo.db
+      - key: UPLOAD_DIR
+        value: ./data/uploads
+      - key: AUTO_SEED_ON_EMPTY
+        value: "true"
+      - key: LLM_PROVIDER
+        value: openrouter
+      - key: LLM_BASE_URL
+        value: https://openrouter.ai/api/v1
+      - key: LLM_MODEL
+        value: nvidia/nemotron-3-ultra-550b-a55b:free
+      - key: LLM_TIMEOUT_SECONDS
+        value: "120"
+      - key: AUTH_SECURE_COOKIE
+        value: "true"
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_PASSWORD
+        sync: false
+      - key: LLM_API_KEY
+        sync: false

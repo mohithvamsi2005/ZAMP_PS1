@@ -26,6 +26,10 @@ class OpenRouterProvider(InvoiceExtractionProvider):
             ],
             "response_format": {"type": "json_object"},
         }
+        # OpenRouter Nemotron reasoning models can return empty `content` with
+        # reasoning enabled; force effort="none" for reliable JSON extraction.
+        if "nemotron" in (self.model or "").lower():
+            payload["reasoning"] = {"effort": "none"}
 
         headers = {
             "Content-Type": "application/json",

@@ -10,7 +10,7 @@ class Settings(BaseSettings):
     llm_provider: str = "openrouter"
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_api_key: str = ""
-    llm_model: str = "meta-llama/llama-3.2-3b-instruct:free"
+    llm_model: str = "nvidia/nemotron-3-ultra-550b-a55b:free"
 
     # LLM runtime
     llm_timeout_seconds: int = 120
@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     # Upload
     upload_dir: str = "./data/uploads"
     max_upload_mb: int = 20
+
+    # Bootstrap / CORS
+    auto_seed_on_empty: bool = False
+    cors_origins: str = "http://localhost:5173"
 
     # Access control (Phase-8 hardening) — see app/core/security.py
     # When write_token is set, guarded endpoints require the X-Zamp-Token header.

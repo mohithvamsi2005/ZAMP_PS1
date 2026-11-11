@@ -6,10 +6,15 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from app.services.run_store import get_dashboard_summary
+from app.core.security import require_write_access
+from app.services.run_store import (
+    ActiveRunConflictError,
+    get_dashboard_summary,
+    reset_demo_data,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -65,6 +70,16 @@ class DashboardSummary(BaseModel):
     latest_failed_runs: List[RecentRun]
 
 
+class ResetResponse(BaseModel):
+    status: str
+    invoices: int
+    runs: int
+    vendors: int
+    purchase_orders: int
+    deleted_files: int
+    message: str
+
+
 @router.get("/summary", response_model=DashboardSummary,
             summary="Aggregated AP-pipeline metrics for the dashboard")
 async def dashboard_summary():
@@ -75,3 +90,13 @@ async def dashboard_summary():
     honest zeros.
     """
     return DashboardSummary(**get_dashboard_summary())
+
+
+@router.post("/reset", response_model=ResetResponse,
+             summary="Reset workspace back to seeded baseline")
+async def dashboard_reset(_access: None = Depends(require_write_access)):
+    """Clear runtime invoices, processing runs, and scoped upload PDFs, then re-seed."""
+    try:
+        return ResetResponse(**reset_demo_data())
+    except ActiveRunConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))

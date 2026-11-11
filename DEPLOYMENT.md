@@ -106,3 +106,11 @@ Because OpenRouter free-tier quotas can be exhausted for the day, the demo is pi
 - Kubernetes/Helm/ECS — single process by design
 - TLS termination — use your own reverse proxy for internet exposure
 - Multi-tenant auth — see `SECURITY_POSTURE.md`
+
+## GitHub Codespaces & Cloud Docker Deployment
+
+1. **GitHub Codespaces (`.devcontainer/devcontainer.json`)**:
+   - Add `LLM_API_KEY` (and optional `AUTH_PASSWORD`) in GitHub **Settings → Secrets and variables → Codespaces**.
+   - Click **Code → Codespaces → Create codespace**. Port `8000` launches automatically; switch its **Ports** visibility to **Public** when sharing live.
+2. **Docker / Render (`render.yaml`) / Railway (`railway.toml`)**:
+   - Connect the GitHub repository, set `LLM_API_KEY` (OpenRouter key) and `AUTH_PASSWORD` in host environment variables, and deploy with `LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free` and `AUTO_SEED_ON_EMPTY=true`.

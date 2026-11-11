@@ -55,6 +55,9 @@ export default function Overview() {
   if (error && !summary) {
     return <ErrorState message={error} onRetry={load} />;
   }
+  if (!summary?.totals) {
+    return <ErrorState message="Could not load dashboard metrics." onRetry={load} />;
+  }
 
   const s = summary as DashboardSummary;
   const t = s.totals;

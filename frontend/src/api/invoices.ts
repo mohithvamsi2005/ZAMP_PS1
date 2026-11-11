@@ -1,9 +1,10 @@
-import { apiGet, apiUrl } from './client';
+import { apiGet, apiPost, apiUrl } from './client';
 import type {
   DashboardSummary,
   InvoiceDetail,
   InvoiceListParams,
   InvoiceListResponse,
+  ResetResponse,
 } from '../types';
 
 export interface UploadOutcome {
@@ -97,4 +98,8 @@ export function invoiceDocumentUrl(invoiceId: number): string {
 
 export function getDashboardSummary(): Promise<DashboardSummary> {
   return apiGet<DashboardSummary>('/dashboard/summary');
+}
+
+export function resetDemoData(): Promise<ResetResponse> {
+  return apiPost<ResetResponse>('/dashboard/reset');
 }

@@ -73,6 +73,8 @@ class TestDocumentServing:
 class TestUploadBoundary:
     def test_upload_directory_permissions(self):
         """The upload dir itself must not be world-writable."""
+        if os.name == "nt":
+            pytest.skip("POSIX permission bitmasks are not applicable on Windows")
         from app.core.config import get_settings
         settings = get_settings()
         target = Path(settings.upload_dir)

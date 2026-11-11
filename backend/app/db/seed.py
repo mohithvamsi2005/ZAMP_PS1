@@ -27,7 +27,11 @@ from app.db.models import (
 
 def seed():
     init_db()
-    enable_sqlite_foreign_keys(SessionLocal())
+    fk_db = SessionLocal()
+    try:
+        enable_sqlite_foreign_keys(fk_db)
+    finally:
+        fk_db.close()
 
     db = SessionLocal()
     try:

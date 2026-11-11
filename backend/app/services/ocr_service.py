@@ -1,6 +1,9 @@
 """OCR service using Tesseract for scanned/image PDF pages."""
 import io
 import logging
+import os
+import shutil
+from pathlib import Path
 from typing import List, Optional
 
 import pymupdf as fitz  # PyMuPDF (phase-8: stop using the deprecated fitz shim)
@@ -8,6 +11,26 @@ from PIL import Image
 import pytesseract
 
 logger = logging.getLogger(__name__)
+
+
+def _configure_tesseract_cmd() -> None:
+    """Resolve tesseract executable on Windows when not yet in the current process PATH."""
+    if shutil.which("tesseract") is not None:
+        return
+    if os.name != "nt":
+        return
+    candidates = [
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Tesseract-OCR" / "tesseract.exe",
+        Path(r"C:\Program Files\Tesseract-OCR\tesseract.exe"),
+        Path(r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe"),
+    ]
+    for candidate in candidates:
+        if candidate.is_file():
+            pytesseract.pytesseract.tesseract_cmd = str(candidate)
+            return
+
+
+_configure_tesseract_cmd()
 
 
 class OCRService:

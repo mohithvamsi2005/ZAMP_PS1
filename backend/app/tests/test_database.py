@@ -317,7 +317,7 @@ def test_seed_is_idempotent():
     from app.db.session import SessionLocal
 
     backend_dir = Path(__file__).resolve().parent.parent.parent  # tests -> app -> backend
-    venv_python = str(backend_dir / ".venv" / "bin" / "python")
+    venv_python = sys.executable
 
     # Use -c to run inline code that sets up path and calls seed() directly,
     # avoiding the module import issue with subprocess.

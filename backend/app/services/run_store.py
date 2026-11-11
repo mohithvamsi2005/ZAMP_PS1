@@ -8,15 +8,28 @@ status metadata only).
 from __future__ import annotations
 
 import json
+import logging
+import threading
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from typing import Any, Optional
 
+from sqlalchemy import text
+
+from app.core.config import get_settings
 from app.db.models import (
     Invoice, ProcessingRun, ProcessingRunEvent, InvoiceLine,
-    ProcessingRunStatus, PurchaseOrder, Vendor,
+    ProcessingRunStatus, PurchaseOrder, PurchaseOrderLine, Vendor,
 )
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, enable_sqlite_foreign_keys
+
+logger = logging.getLogger(__name__)
+_reset_lock = threading.Lock()
+
+
+class ActiveRunConflictError(Exception):
+    """Raised when a reset is attempted while runs are pending or running."""
 
 
 def _loads(raw: Optional[str], default=None) -> Any:
@@ -470,3 +483,94 @@ def get_dashboard_summary() -> dict:
         }
     finally:
         db.close()
+
+
+def reset_demo_data() -> dict:
+    """Clear active database records, remove scoped uploads, and re-seed baseline data."""
+    from app.db.seed import seed
+
+    settings = get_settings()
+    with _reset_lock:
+        db = SessionLocal()
+        try:
+            enable_sqlite_foreign_keys(db)
+            active_runs = (
+                db.query(ProcessingRun)
+                .filter(ProcessingRun.status.in_([ProcessingRunStatus.PENDING, ProcessingRunStatus.RUNNING]))
+                .count()
+            )
+            if active_runs:
+                raise ActiveRunConflictError(
+                    "Cannot reset data while a processing run is queued or in progress."
+                )
+
+            storage_paths = [
+                row[0]
+                for row in db.query(Invoice.storage_path)
+                .filter(Invoice.storage_path.isnot(None))
+                .all()
+            ]
+
+            db.query(ProcessingRunEvent).delete(synchronize_session=False)
+            db.query(ProcessingRun).delete(synchronize_session=False)
+            db.query(InvoiceLine).delete(synchronize_session=False)
+            db.query(Invoice).delete(synchronize_session=False)
+            db.query(PurchaseOrderLine).delete(synchronize_session=False)
+            db.query(PurchaseOrder).delete(synchronize_session=False)
+            db.query(Vendor).delete(synchronize_session=False)
+
+            if settings.database_url.startswith("sqlite"):
+                seq_exists = db.execute(
+                    text("SELECT name FROM sqlite_master WHERE type='table' AND name='sqlite_sequence'")
+                ).fetchone()
+                if seq_exists:
+                    db.execute(
+                        text(
+                            "DELETE FROM sqlite_sequence WHERE name IN "
+                            "('vendors','purchase_orders','purchase_order_lines','invoices','invoice_lines','run_events')"
+                        )
+                    )
+
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
+        try:
+            upload_base = Path(settings.upload_dir).resolve()
+        except (OSError, RuntimeError):
+            upload_base = None
+
+        deleted_files = 0
+        if upload_base is not None:
+            for raw_path in set(storage_paths):
+                if not raw_path:
+                    continue
+                try:
+                    candidate = Path(raw_path).resolve()
+                except (OSError, RuntimeError):
+                    continue
+                if candidate != upload_base and upload_base in candidate.parents and candidate.is_file():
+                    try:
+                        candidate.unlink(missing_ok=True)
+                        deleted_files += 1
+                    except OSError:
+                        logger.warning("Failed to remove uploaded file during reset: %s", candidate)
+
+        seed()
+
+        verify_db = SessionLocal()
+        try:
+            return {
+                "status": "ok",
+                "invoices": int(verify_db.query(Invoice).count()),
+                "runs": int(verify_db.query(ProcessingRun).count()),
+                "vendors": int(verify_db.query(Vendor).count()),
+                "purchase_orders": int(verify_db.query(PurchaseOrder).count()),
+                "deleted_files": deleted_files,
+                "message": "Workspace reset to seeded baseline.",
+            }
+        finally:
+            verify_db.close()

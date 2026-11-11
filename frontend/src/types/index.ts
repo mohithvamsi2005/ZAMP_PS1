@@ -278,3 +278,13 @@ export interface HealthResponse {
   llm_provider: string;
   llm_model: string;
 }
+
+export interface ResetResponse {
+  status: string;
+  invoices: number;
+  runs: number;
+  vendors: number;
+  purchase_orders: number;
+  deleted_files: number;
+  message: string;
+}

@@ -232,3 +232,99 @@ class TestInvoiceDocument:
         finally:
             session.close()
         assert client.get(f"/api/invoices/{invoice_id}/document").status_code == 404
+
+
+class TestDashboardReset:
+    def test_reset_restores_baseline_and_deletes_only_scoped_uploads(self, seeded, client, tmp_path):
+        from pathlib import Path
+        from app.core.config import get_settings
+        from app.services.workflow import create_invoice_and_run
+
+        payload = b"%PDF-1.4\nreset-test-payload" + b"a" * 32
+        uploaded_id, _ = create_invoice_and_run(payload, "reset_me.pdf")
+
+        # Mark the auto-created PENDING run as COMPLETED so reset is permitted
+        session = SessionLocal()
+        try:
+            inv = session.get(Invoice, uploaded_id)
+            uploaded_path = Path(inv.storage_path)
+            for r in session.query(ProcessingRun).all():
+                r.status = "COMPLETED"
+                r.decision = "APPROVE"
+            # Add an invoice whose storage_path points outside UPLOAD_DIR
+            outside_file = tmp_path / "do_not_delete.pdf"
+            outside_file.write_bytes(b"%PDF-1.4\nkeep-me")
+            decoy = Invoice(
+                invoice_number="INV-OUTSIDE",
+                storage_path=str(outside_file),
+                currency="INR",
+                total_amount=Decimal("100.00"),
+            )
+            session.add(decoy)
+            session.commit()
+        finally:
+            session.close()
+
+        assert uploaded_path.is_file()
+        assert Path(get_settings().upload_dir).resolve() in uploaded_path.resolve().parents
+        assert outside_file.is_file()
+
+        resp = client.post("/api/dashboard/reset")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "ok"
+        assert body["invoices"] == 3
+        assert body["runs"] == 0
+        assert body["vendors"] == 6
+        assert body["purchase_orders"] == 8
+        assert body["deleted_files"] == 1
+
+        assert not uploaded_path.exists()
+        assert outside_file.is_file()
+
+        summary = client.get("/api/dashboard/summary").json()
+        assert summary["totals"]["invoices"] == 3
+        assert summary["totals"]["runs"] == 0
+        assert summary["decisions"] == {"APPROVE": 0, "REVIEW": 0, "REJECT": 0}
+
+    def test_reset_rejects_when_run_is_in_flight(self, client):
+        from app.services.workflow import create_invoice_and_run
+
+        payload = b"%PDF-1.4\nin-flight" + b"z" * 32
+        create_invoice_and_run(payload, "inflight.pdf")  # creates a PENDING run
+
+        resp = client.post("/api/dashboard/reset")
+        assert resp.status_code == 409
+        assert "in progress" in resp.json()["detail"].lower()
+
+        session = SessionLocal()
+        try:
+            run = session.query(ProcessingRun).first()
+            run.status = "RUNNING"
+            session.commit()
+        finally:
+            session.close()
+
+        resp_running = client.post("/api/dashboard/reset")
+        assert resp_running.status_code == 409
+
+    def test_reset_respects_auth_and_write_token(self, client):
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        orig_pw = settings.auth_password
+        orig_tok = settings.write_token
+        try:
+            settings.auth_password = "reset-secret-pw"
+            assert client.post("/api/dashboard/reset").status_code == 401
+
+            login = client.post("/api/auth/login", json={"password": "reset-secret-pw"})
+            assert login.status_code == 200
+
+            settings.write_token = "write-tok-123"
+            assert client.post("/api/dashboard/reset").status_code == 403
+            ok = client.post("/api/dashboard/reset", headers={"X-Zamp-Token": "write-tok-123"})
+            assert ok.status_code == 200
+        finally:
+            settings.auth_password = orig_pw
+            settings.write_token = orig_tok

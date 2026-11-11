@@ -29,7 +29,23 @@ _PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/status"}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     from app.db.session import init_db
+    if settings.database_url.startswith("sqlite:///"):
+        db_file = settings.database_url.removeprefix("sqlite:///")
+        if db_file and db_file != ":memory:":
+            Path(db_file).parent.mkdir(parents=True, exist_ok=True)
+    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)
     init_db()
+    if settings.auto_seed_on_empty:
+        from app.db.session import SessionLocal
+        from app.db.models import Vendor
+        from app.db.seed import seed
+        db = SessionLocal()
+        try:
+            empty = db.query(Vendor.id).first() is None
+        finally:
+            db.close()
+        if empty:
+            seed()
     print(f"Backend started — provider={settings.llm_provider}, db={settings.database_url}")
     yield
 
@@ -43,7 +59,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()] or ["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

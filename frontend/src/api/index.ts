@@ -11,6 +11,7 @@ export {
   listInvoices,
   getInvoice,
   getDashboardSummary,
+  resetDemoData,
   invoiceDocumentUrl,
 } from '../api/invoices';
 export type { UploadOutcome } from '../api/invoices';
