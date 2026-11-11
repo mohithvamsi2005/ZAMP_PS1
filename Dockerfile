@@ -16,6 +16,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UPLOAD_DIR=./data/uploads \
     MAX_UPLOAD_MB=20 \
     AUTO_SEED_ON_EMPTY=true \
+    ALLOW_PUBLIC_WRITE=true \
     LLM_PROVIDER=openrouter \
     LLM_BASE_URL=https://openrouter.ai/api/v1 \
     LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free \

@@ -24,6 +24,7 @@ os.environ["UPLOAD_DIR"] = str(TEST_UPLOAD_DIR)
 # The deployment singleton settings may carry AUTH_PASSWORD from the developer's
 # local .env; tests must always run with auth disabled unless they enable it explicitly.
 os.environ["AUTH_PASSWORD"] = ""
+os.environ["ALLOW_PUBLIC_WRITE"] = "false"
 
 # Keep noisy-but-expected warnings out of the output without hiding real issues
 os.environ.setdefault("PYTHONWARNINGS", "ignore::DeprecationWarning")

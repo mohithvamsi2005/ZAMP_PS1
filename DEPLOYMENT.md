@@ -113,4 +113,4 @@ Because OpenRouter free-tier quotas can be exhausted for the day, the demo is pi
    - Add `LLM_API_KEY` (and optional `AUTH_PASSWORD`) in GitHub **Settings → Secrets and variables → Codespaces**.
    - Click **Code → Codespaces → Create codespace**. Port `8000` launches automatically; switch its **Ports** visibility to **Public** when sharing live.
 2. **Docker / Render (`render.yaml`) / Railway (`railway.toml`)**:
-   - Connect the GitHub repository, set `LLM_API_KEY` (OpenRouter key) and `AUTH_PASSWORD` in host environment variables, and deploy with `LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free` and `AUTO_SEED_ON_EMPTY=true`.
+   - Connect the GitHub repository, set `LLM_API_KEY` (OpenRouter key), and optionally set `AUTH_PASSWORD` to require sign-in. (`Dockerfile` sets `LLM_MODEL=nvidia/nemotron-3-ultra-550b-a55b:free`, `AUTO_SEED_ON_EMPTY=true`, and `ALLOW_PUBLIC_WRITE=true` for passwordless demo testing unless `AUTH_PASSWORD` or `WRITE_TOKEN` is set.)

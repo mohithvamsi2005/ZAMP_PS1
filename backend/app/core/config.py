@@ -26,8 +26,10 @@ class Settings(BaseSettings):
 
     # Access control (Phase-8 hardening) — see app/core/security.py
     # When write_token is set, guarded endpoints require the X-Zamp-Token header.
-    # When empty, guarded endpoints only serve loopback clients.
+    # When empty, guarded endpoints serve loopback clients unless auth_password
+    # or allow_public_write is enabled.
     write_token: str = ""
+    allow_public_write: bool = False
     diagnostic_rate_per_minute: int = 10
     upload_rate_per_minute: int = 30
 

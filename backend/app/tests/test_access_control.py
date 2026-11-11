@@ -75,6 +75,38 @@ class TestLoopbackDefault:
             settings.auth_password = orig_pw
             settings.write_token = orig_tok
 
+    def test_allow_public_write_off_loopback_and_overridden_by_auth(self):
+        from app.core.auth import SESSION_COOKIE, make_session_value
+
+        settings = get_settings()
+        orig_pub = settings.allow_public_write
+        orig_pw = settings.auth_password
+        orig_tok = settings.write_token
+        settings.allow_public_write = True
+        settings.auth_password = ""
+        settings.write_token = ""
+        try:
+            # Passwordless public demo mode permits remote uploads/retries
+            require_write_access(_request("9.9.9.9"))
+
+            # Auth password takes precedence if configured
+            settings.auth_password = "cloud-demo-password"
+            with pytest.raises(HTTPException) as exc:
+                require_write_access(_request("9.9.9.9"))
+            assert exc.value.status_code == 403
+            cookie_val = make_session_value()
+            require_write_access(_request("9.9.9.9", {"cookie": f"{SESSION_COOKIE}={cookie_val}"}))
+
+            # Explicit write_token still overrides everything
+            settings.write_token = "phase8-secret"
+            with pytest.raises(HTTPException) as exc2:
+                require_write_access(_request("9.9.9.9", {"cookie": f"{SESSION_COOKIE}={cookie_val}"}))
+            assert exc2.value.status_code == 403
+        finally:
+            settings.allow_public_write = orig_pub
+            settings.auth_password = orig_pw
+            settings.write_token = orig_tok
+
     def test_rate_limiter_sliding_window(self):
         reset_rate_limiter()
         for _ in range(5):
@@ -106,3 +138,37 @@ class TestGuardedEndpoints:
             dep(_request("127.0.0.1"))
         assert exc.value.status_code == 429
         reset_rate_limiter()
+
+    def test_remote_upload_and_reset_http_with_allow_public_write(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+
+        settings = get_settings()
+        orig_pub = settings.allow_public_write
+        orig_pw = settings.auth_password
+        orig_tok = settings.write_token
+        settings.auth_password = ""
+        settings.write_token = ""
+        remote = TestClient(app, client=("203.0.113.55", 50000))
+        try:
+            settings.allow_public_write = False
+            assert remote.post("/api/dashboard/reset").status_code == 403
+            resp_blocked = remote.post(
+                "/api/invoices/upload",
+                files={"file": ("bad.txt", b"not-a-pdf", "text/plain")},
+            )
+            assert resp_blocked.status_code == 403
+
+            settings.allow_public_write = True
+            assert remote.get("/api/auth/status").json() == {"required": False, "authenticated": True}
+            assert remote.post("/api/dashboard/reset").status_code == 200
+            # Reaches handler validation (400 bad PDF) instead of 403 access denial
+            resp_allowed = remote.post(
+                "/api/invoices/upload",
+                files={"file": ("bad.txt", b"not-a-pdf", "text/plain")},
+            )
+            assert resp_allowed.status_code == 400
+        finally:
+            settings.allow_public_write = orig_pub
+            settings.auth_password = orig_pw
+            settings.write_token = orig_tok

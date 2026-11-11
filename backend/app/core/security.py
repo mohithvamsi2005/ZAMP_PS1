@@ -56,7 +56,7 @@ def reset_rate_limiter() -> None:
 
 
 def require_write_access(request: Request) -> None:
-    """Authn-by-token (if configured), authenticated session, or loopback-only enforcement."""
+    """Authn-by-token (if configured), authenticated session, public-demo opt-in, or loopback-only enforcement."""
     settings = get_settings()
     token = getattr(settings, "write_token", "") or ""
     if token:
@@ -65,7 +65,11 @@ def require_write_access(request: Request) -> None:
             raise HTTPException(status_code=403, detail="Missing or invalid X-Zamp-Token")
         return
     from app.core.auth import is_enabled, session_ok, bearer_ok
-    if is_enabled() and (session_ok(request) or bearer_ok(request)):
+    if is_enabled():
+        if session_ok(request) or bearer_ok(request):
+            return
+        raise HTTPException(status_code=403, detail="Authentication required")
+    if getattr(settings, "allow_public_write", False):
         return
     host = request.client.host if request.client else ""
     if host not in _LOOPBACK:
